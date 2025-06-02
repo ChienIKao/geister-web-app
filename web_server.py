@@ -265,6 +265,28 @@ def check_win(room, player_id, moved_type, to_pos):
     return None, ""
 
 
+# --- 玩家斷線處理 ---
+@socketio.on("disconnect")
+def handle_disconnect():
+    sid = request.sid
+    # 找到該玩家所在房間與身份
+    for room_code, room in list(rooms.items()):
+        for idx, player in enumerate(room["players"]):
+            if player["sid"] == sid:
+                # 只要有對手，直接判對手獲勝
+                other_idx = 1 - idx if len(room["players"]) == 2 else None
+                if other_idx is not None and len(room["players"]) == 2:
+                    other_sid = room["players"][other_idx]["sid"]
+                    emit(
+                        "game_over",
+                        {"winner": other_idx + 1, "reason": "對手斷線，您獲勝！"},
+                        room=other_sid,
+                    )
+                # 釋放房間
+                del rooms[room_code]
+                return
+
+
 # 這裡可以加入遊戲邏輯的 SocketIO 事件
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))

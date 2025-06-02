@@ -38,8 +38,13 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            min-width: unset;
-            max-width: unset;
+            min-width: 240px;
+            max-width: 240px;
+            min-height: 240px;
+            max-height: 240px;
+            width: 240px;
+            height: 240px;
+            overflow: visible;
         }
         #board-area > div {
             display: flex;
@@ -75,14 +80,15 @@
             font-weight: bold;
         }
         .cell, .setup-cell {
-            width: 40px;
-            height: 40px;
+            width: 36px;
+            height: 36px;
             font-size: 1.5rem;
-            line-height: 40px;
+            line-height: 36px;
             display: flex;
             align-items: center;
             justify-content: center;
             border-radius: 6px;
+            box-sizing: border-box;
             /* 盤面與佈局格子完全一致 */
         }
         .cell {
@@ -378,6 +384,7 @@
             window.roomCode = myRoomCode;
             window.myName = myNickname;
             window.oppoName = opponentNickname;
+            window.lastActionDesc = data.last_action_desc || '';
             renderBoard(data.board);
             renderInfo(data);
         });
@@ -385,6 +392,7 @@
         socket.on('update_state', (data) => {
             window.myTurn = (data.turn === window.myPlayerId);
             window.currentBoard = data.board;
+            window.lastActionDesc = data.last_action_desc || '';
             renderBoard(data.board);
             renderInfo(data);
         });
@@ -395,9 +403,11 @@
 
         socket.on('game_over', (data) => {
             let msg = '遊戲結束！' + (data.reason ? ('\n' + data.reason) : '');
-            if (data.winner === window.myPlayerId) msg += '\n你獲勝了！';
-            else if (data.winner) msg += '\n你輸了...';
-            else msg += '\n平手';
+            let showWin = data.winner === window.myPlayerId;
+            let showLose = data.winner && data.winner !== window.myPlayerId && !(data.reason && data.reason.includes('對手斷線'));
+            if (showWin) msg += '\n你獲勝了！';
+            else if (showLose) msg += '\n你輸了...';
+            else if (!data.winner) msg += '\n平手';
             document.getElementById('game-area').innerHTML = `<div style='white-space:pre-line;font-size:1.2rem;margin-bottom:16px;'>${msg}</div><button id='main-menu-btn'>回到主選單</button>`;
             document.getElementById('main-menu-btn').onclick = function() {
                 location.reload();
@@ -408,6 +418,14 @@
         function renderBoard(board) {
             const area = document.getElementById('board-area');
             area.innerHTML = '';
+            // 取得上一步移動座標（格式如：玩家1 從(2,3)移動到(3,3)）
+            let lastAction = window.lastActionDesc || '';
+            let fromSq = null, toSq = null;
+            const moveMatch = lastAction.match(/從\((\d+),(\d+)\)移動到\((\d+),(\d+)\)/);
+            if (moveMatch) {
+                fromSq = [parseInt(moveMatch[1]), parseInt(moveMatch[2])];
+                toSq = [parseInt(moveMatch[3]), parseInt(moveMatch[4])];
+            }
             for (let r = 0; r < 6; r++) {
                 let rowDiv = document.createElement('div');
                 for (let c = 0; c < 6; c++) {
@@ -426,6 +444,10 @@
                         span.innerHTML = '❓';
                     } else {
                         span.innerHTML = '';
+                    }
+                    // 標示上一步移動
+                    if ((fromSq && fromSq[0] === r && fromSq[1] === c) || (toSq && toSq[0] === r && toSq[1] === c)) {
+                        span.style.boxShadow = '0 0 0 3px #43a047 inset';
                     }
                     span.style.cursor = window.myTurn ? 'pointer' : 'default';
                     span.dataset.r = r;
@@ -480,9 +502,7 @@
                         <span class="label">💀 吃掉對手壞鬼</span>
                         <span class="value">${data.opponent_bad_captured_by_me}/4</span>
                      </div>`;
-            if (data.last_action_desc) {
-                info += `<div class="info-action">📝 ${data.last_action_desc}</div>`;
-            }
+            // 不再顯示上一動作
             info += `<div class="info-turn${window.myTurn ? '' : ' waiting'}">${window.myTurn ? '🎯 輪到你了！' : '⏳ 等待對手...'}</div>`;
             document.getElementById('info-area').innerHTML = info;
         }
