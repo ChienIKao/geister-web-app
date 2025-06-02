@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>Geister Web 遊戲</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <style>
+        body {
+            background: #f5f5f5;
+            font-family: 'Segoe UI', 'Microsoft JhengHei', Arial, sans-serif;
+        }
+        #main-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+        }
+        #game-area {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+            padding: 32px 24px 24px 24px;
+            margin-top: 32px;
+            min-width: 400px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+        }
+        #game-area.game-flex-row {
+            flex-direction: row;
+            align-items: flex-start;
+            gap: 32px;
+        }
+        #board-area {
+            margin: 16px 0 8px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: unset;
+            max-width: unset;
+        }
+        #board-area > div {
+            display: flex;
+        }
+        #info-area {
+            margin-top: 0;
+            font-size: 1.1rem;
+            background: #f8f9fa;
+            padding: 16px;
+            border-radius: 12px;
+            border: 1px solid #e9ecef;
+            min-width: 260px;
+            max-width: 320px;
+            box-sizing: border-box;
+        }
+        .info-names {
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .info-names .room {
+            font-size: 1.05rem;
+            color: #1976d2;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        .info-names .me {
+            color: #1565c0;
+            font-weight: bold;
+        }
+        .info-names .oppo {
+            color: #b71c1c;
+            font-weight: bold;
+        }
+        .cell, .setup-cell {
+            width: 40px;
+            height: 40px;
+            font-size: 1.5rem;
+            line-height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 6px;
+            /* 盤面與佈局格子完全一致 */
+        }
+        .cell {
+            border: 1px solid #aaa;
+            margin: 2px;
+            background: #f0e6d6;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .cell.selected {
+            background: #ffe066;
+        }
+        .cell.good {
+            background: #e3f2fd !important;
+        }
+        .cell.bad {
+            background: #ffe0e0 !important;
+        }
+        .cell.opp {
+            background: #e0e0e0 !important;
+        }
+        .info-stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            margin: 4px 0;
+            background: #fff;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        .info-stat .label {
+            font-weight: 500;
+            color: #495057;
+        }
+        .info-stat .value {
+            font-weight: bold;
+            color: #212529;
+            background: #e9ecef;
+            padding: 4px 8px;
+            border-radius: 4px;
+            min-width: 40px;
+            text-align: center;
+        }
+        .info-turn {
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            padding: 12px;
+            margin: 8px 0;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .info-turn.waiting {
+            background: linear-gradient(135deg, #6c757d, #adb5bd);
+        }
+        #setup-area button {
+            margin: 2px;
+        }
+        #setup-area {
+            margin: 12px 0 0 0;
+        }
+        #submit-setup {
+            margin-top: 10px;
+            padding: 6px 18px;
+            font-size: 1rem;
+            border-radius: 6px;
+            border: none;
+            background: #2196f3;
+            color: #fff;
+            cursor: pointer;
+        }
+        #submit-setup:hover {
+            background: #1565c0;
+        }
+        .setup-area-row {
+            display: flex;
+        }
+        .setup-cell {
+            width: 40px;
+            height: 40px;
+            font-size: 1.2rem;
+            border-radius: 8px;
+            border: 2px solid #aaa;
+            margin: 2px;
+            background: #f0e6d6;
+            position: relative;
+            transition: border 0.2s, box-shadow 0.2s;
+        }
+        .setup-allowed {
+            border: 1.5px solid #aaa;
+            box-shadow: none;
+            background: #fff;
+            z-index: 2;
+        }
+        .setup-good, .cell.good {
+            background: linear-gradient(135deg, #2196f3 70%, #1565c0 100%) !important;
+            color: #fff !important;
+            border: 2.5px solid #1976d2 !important;
+        }
+        .setup-bad, .cell.bad {
+            background: linear-gradient(135deg, #e53935 70%, #b71c1c 100%) !important;
+            color: #fff !important;
+            border: 2.5px solid #b71c1c !important;
+        }
+        .setup-disabled {
+            background: #e0e0e0 !important;
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        #main-menu-btn {
+            margin-top: 18px;
+            padding: 7px 22px;
+            font-size: 1.1rem;
+            border-radius: 6px;
+            border: none;
+            background: #2196f3;
+            color: #fff;
+            cursor: pointer;
+        }
+        #main-menu-btn:hover {
+            background: #1565c0;
+        }
+    </style>
+</head>
+<body>
+    <div id="main-container">
+        <h1>Geister Web 遊戲</h1>
+        <div id="nickname-area">
+            <input type="text" id="nickname-input" placeholder="請輸入你的暱稱" maxlength="12" style="font-size:1.1rem;padding:6px 10px;border-radius:6px;border:1px solid #aaa;">
+            <input type="text" id="roomcode-input" placeholder="4位數房號" maxlength="4" style="font-size:1.1rem;padding:6px 10px;border-radius:6px;border:1px solid #aaa;width:90px;margin-left:8px;">
+            <button id="start-btn" style="font-size:1.1rem;padding:6px 18px;border-radius:6px;border:none;background:#2196f3;color:#fff;cursor:pointer;margin-left:8px;">進入房間</button>
+        </div>
+        <div id="game-area" style="display:none;">
+            <!-- 遊戲畫面之後會放這裡 -->
+        </div>
+    </div>
+    <script>
+        const socket = io();
+        let myRoomId = null;
+        let myPlayerId = null;
+        let opponentNickname = null;
+        let myNickname = '';
+        let myRoomCode = '';
+
+        document.getElementById('start-btn').onclick = function() {
+            const input = document.getElementById('nickname-input');
+            const roomInput = document.getElementById('roomcode-input');
+            let nickname = input.value.trim();
+            let roomCode = roomInput.value.trim();
+            if (!nickname) {
+                alert('請輸入暱稱！');
+                input.focus();
+                return;
+            }
+            if (!roomCode || !/^\d{4}$/.test(roomCode)) {
+                alert('請輸入 4 位數字房號！');
+                roomInput.focus();
+                return;
+            }
+            myNickname = nickname;
+            myRoomCode = roomCode;
+            document.getElementById('nickname-area').style.display = 'none';
+            document.getElementById('game-area').style.display = '';
+            joinGame();
+        };
+
+        // 送出加入遊戲請求
+        function joinGame() {
+            socket.emit('join_game', {nickname: myNickname, room_code: myRoomCode});
+        }
+
+        socket.on('waiting', (data) => {
+            document.getElementById('game-area').innerHTML = '<p>' + data.message + '</p>';
+        });
+
+        socket.on('matched', (data) => {
+            myRoomId = data.room_id;
+            myPlayerId = data.player;
+            opponentNickname = data.opponent_nickname;
+            document.getElementById('game-area').innerHTML = `<p>配對成功！你是玩家 ${myPlayerId}<br>對手暱稱：${opponentNickname}</p>`;
+            // 進入佈局階段
+            socket.emit('start_setup', {room_id: myRoomId, player: myPlayerId});
+        });
+
+        socket.on('start_setup', () => {
+            const gameArea = document.getElementById('game-area');
+            gameArea.classList.remove('game-flex-row');
+            gameArea.innerHTML = `
+                <p>請佈局你的棋子（4個好鬼4個壞鬼）</p>
+                <div id='setup-counts'></div>
+                <div id='setup-area'></div>
+                <button id='submit-setup'>送出佈局</button>
+            `;
+            createSetupBoard();
+            updateSetupCounts();
+        });
+
+        function createSetupBoard() {
+            const area = document.getElementById('setup-area');
+            area.innerHTML = '';
+            let board = [];
+            let validRows = (myPlayerId === 1) ? [0,1] : [4,5];
+            let validCols = [1,2,3,4];
+            for (let r = 0; r < 6; r++) {
+                let row = [];
+                let rowDiv = document.createElement('div');
+                rowDiv.className = 'setup-area-row';
+                for (let c = 0; c < 6; c++) {
+                    let btn = document.createElement('button');
+                    btn.innerHTML = '';
+                    btn.className = 'setup-cell';
+                    btn.dataset.r = r;
+                    btn.dataset.c = c;
+                    if (validRows.includes(r) && validCols.includes(c)) {
+                        btn.classList.add('setup-allowed');
+                        btn.onclick = function() { selectPiece(this); };
+                    } else {
+                        btn.classList.add('setup-disabled');
+                        btn.disabled = true;
+                    }
+                    rowDiv.appendChild(btn);
+                    row.push(btn);
+                }
+                area.appendChild(rowDiv);
+                board.push(row);
+            }
+            window.setupBoard = board;
+            window.placements = [];
+        }
+        function selectPiece(btn) {
+            const r = parseInt(btn.dataset.r);
+            const c = parseInt(btn.dataset.c);
+            let validRows = (myPlayerId === 1) ? [0,1] : [4,5];
+            let validCols = [1,2,3,4];
+            if (!validRows.includes(r) || !validCols.includes(c)) return;
+            let goodCount = window.placements.filter(p => p.ghost_type === 'G').length;
+            let badCount = window.placements.filter(p => p.ghost_type === 'B').length;
+            if (!btn.innerHTML) {
+                if (goodCount < 4) {
+                    btn.innerHTML = '👻';
+                    btn.classList.add('setup-good');
+                    btn.classList.remove('setup-bad');
+                    window.placements.push({row: r, col: c, ghost_type: 'G'});
+                } else if (badCount < 4) {
+                    btn.innerHTML = '💀';
+                    btn.classList.add('setup-bad');
+                    btn.classList.remove('setup-good');
+                    window.placements.push({row: r, col: c, ghost_type: 'B'});
+                }
+            } else {
+                let idx = window.placements.findIndex(p => p.row === r && p.col === c);
+                if (idx !== -1) {
+                    window.placements.splice(idx, 1);
+                    btn.innerHTML = '';
+                    btn.classList.remove('setup-good');
+                    btn.classList.remove('setup-bad');
+                }
+            }
+            updateSetupCounts();
+        }
+        function updateSetupCounts() {
+            let goodCount = window.placements ? window.placements.filter(p => p.ghost_type === 'G').length : 0;
+            let badCount = window.placements ? window.placements.filter(p => p.ghost_type === 'B').length : 0;
+            document.getElementById('setup-counts').innerHTML =
+                `<span style='color:#222;'>好鬼：👻 ${goodCount}/4</span>　` +
+                `<span style='color:#222;'>壞鬼：💀 ${badCount}/4</span>`;
+        }
+        document.addEventListener('click', function(e) {
+            if (e.target && e.target.id === 'submit-setup') {
+                if (window.placements.length !== 8 || window.placements.filter(p=>p.ghost_type==='G').length!==4 || window.placements.filter(p=>p.ghost_type==='B').length!==4) {
+                    alert('請正確放置4個好鬼與4個壞鬼！');
+                    return;
+                }
+                socket.emit('setup_data', {room_id: myRoomId, player: myPlayerId, placements: window.placements});
+                document.getElementById('game-area').innerHTML = '<p>等待對手佈局...</p>';
+            }
+        });
+
+        socket.on('game_start', (data) => {
+            const gameArea = document.getElementById('game-area');
+            gameArea.classList.add('game-flex-row');
+            gameArea.innerHTML = `
+                <div id='board-area'></div>
+                <div id='info-area'></div>
+            `;
+            window.myTurn = (data.turn === data.your_player);
+            window.myPlayerId = data.your_player;
+            window.currentBoard = data.board;
+            window.roomCode = myRoomCode;
+            window.myName = myNickname;
+            window.oppoName = opponentNickname;
+            renderBoard(data.board);
+            renderInfo(data);
+        });
+
+        socket.on('update_state', (data) => {
+            window.myTurn = (data.turn === window.myPlayerId);
+            window.currentBoard = data.board;
+            renderBoard(data.board);
+            renderInfo(data);
+        });
+
+        socket.on('invalid_move', (data) => {
+            alert(data.message);
+        });
+
+        socket.on('game_over', (data) => {
+            let msg = '遊戲結束！' + (data.reason ? ('\n' + data.reason) : '');
+            if (data.winner === window.myPlayerId) msg += '\n你獲勝了！';
+            else if (data.winner) msg += '\n你輸了...';
+            else msg += '\n平手';
+            document.getElementById('game-area').innerHTML = `<div style='white-space:pre-line;font-size:1.2rem;margin-bottom:16px;'>${msg}</div><button id='main-menu-btn'>回到主選單</button>`;
+            document.getElementById('main-menu-btn').onclick = function() {
+                location.reload();
+            };
+            window.myTurn = false;
+        });
+
+        function renderBoard(board) {
+            const area = document.getElementById('board-area');
+            area.innerHTML = '';
+            for (let r = 0; r < 6; r++) {
+                let rowDiv = document.createElement('div');
+                for (let c = 0; c < 6; c++) {
+                    let span = document.createElement('span');
+                    let cell = board[r][c];
+                    span.className = 'cell';
+                    // 顏色區分與符號美化
+                    if ((myPlayerId === 1 && cell === 'g') || (myPlayerId === 2 && cell === 'G')) {
+                        span.classList.add('good');
+                        span.innerHTML = '👻';
+                    } else if ((myPlayerId === 1 && cell === 'b') || (myPlayerId === 2 && cell === 'B')) {
+                        span.classList.add('bad');
+                        span.innerHTML = '💀';
+                    } else if (cell === 'X') {
+                        span.classList.add('opp');
+                        span.innerHTML = '❓';
+                    } else {
+                        span.innerHTML = '';
+                    }
+                    span.style.cursor = window.myTurn ? 'pointer' : 'default';
+                    span.dataset.r = r;
+                    span.dataset.c = c;
+                    span.onclick = function() {
+                        if (!window.myTurn) return;
+                        handleBoardClick(r, c);
+                    };
+                    rowDiv.appendChild(span);
+                }
+                area.appendChild(rowDiv);
+            }
+            window.selected = null;
+        }
+
+        function handleBoardClick(r, c) {
+            if (window.selected) {
+                // 發送移動
+                const from_sq = window.selected;
+                const to_sq = [r, c];
+                window.selected = null;
+                socket.emit('move', {room_id: myRoomId, player: myPlayerId, from_sq, to_sq});
+            } else {
+                // 選擇自己的棋子
+                let piece = window.currentBoard[r][c];
+                if ((myPlayerId === 1 && (piece === 'g' || piece === 'b')) || (myPlayerId === 2 && (piece === 'G' || piece === 'B'))) {
+                    window.selected = [r, c];
+                }
+            }
+        }
+
+        function renderInfo(data) {
+            let info = '';
+            info += `<div class="info-names">
+                        <div class="room">🏷️ 房號：${window.roomCode || ''}</div>
+                        <div><span class="me">🧑‍💻 ${window.myName || '我'}</span></div>
+                        <div><span class="oppo">🧑‍💻 ${window.oppoName || '對手'}</span></div>
+                     </div>`;
+            info += `<div class="info-stat">
+                        <span class="label">👻 我的好鬼被吃</span>
+                        <span class="value">${data.my_good_captured_by_opponent}/4</span>
+                     </div>`;
+            info += `<div class="info-stat">
+                        <span class="label">💀 我的壞鬼被吃</span>
+                        <span class="value">${data.my_bad_captured_by_opponent}/4</span>
+                     </div>`;
+            info += `<div class="info-stat">
+                        <span class="label">👻 吃掉對手好鬼</span>
+                        <span class="value">${data.opponent_good_captured_by_me}/4</span>
+                     </div>`;
+            info += `<div class="info-stat">
+                        <span class="label">💀 吃掉對手壞鬼</span>
+                        <span class="value">${data.opponent_bad_captured_by_me}/4</span>
+                     </div>`;
+            if (data.last_action_desc) {
+                info += `<div class="info-action">📝 ${data.last_action_desc}</div>`;
+            }
+            info += `<div class="info-turn${window.myTurn ? '' : ' waiting'}">${window.myTurn ? '🎯 輪到你了！' : '⏳ 等待對手...'}</div>`;
+            document.getElementById('info-area').innerHTML = info;
+        }
+
+        // 頁面載入自動加入遊戲
+        window.onload = joinGame;
+    </script>
+</body>
+</html>
