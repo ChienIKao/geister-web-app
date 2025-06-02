@@ -219,9 +219,7 @@ def handle_move(data):
                 room=room["players"][pid - 1]["sid"],
             )
         room["turn"] = None
-        # 清除房間，讓同一房號可再次使用
-        if room_id in rooms:
-            del rooms[room_id]
+        # 遊戲結束時不刪除房間，保留盤面供覆盤（僅 turn=None）
         return
     # 換手
     room["turn"] = 2 if player == 1 else 1
@@ -273,16 +271,17 @@ def handle_disconnect():
     for room_code, room in list(rooms.items()):
         for idx, player in enumerate(room["players"]):
             if player["sid"] == sid:
-                # 只要有對手，直接判對手獲勝
-                other_idx = 1 - idx if len(room["players"]) == 2 else None
-                if other_idx is not None and len(room["players"]) == 2:
-                    other_sid = room["players"][other_idx]["sid"]
-                    emit(
-                        "game_over",
-                        {"winner": other_idx + 1, "reason": "對手斷線，您獲勝！"},
-                        room=other_sid,
-                    )
-                # 釋放房間
+                # 只在遊戲尚未結束時判斷斷線勝負
+                if room.get("turn") is not None:
+                    other_idx = 1 - idx if len(room["players"]) == 2 else None
+                    if other_idx is not None and len(room["players"]) == 2:
+                        other_sid = room["players"][other_idx]["sid"]
+                        emit(
+                            "game_over",
+                            {"winner": other_idx + 1, "reason": "對手斷線，您獲勝！"},
+                            room=other_sid,
+                        )
+                # 釋放房間（此時才真正刪除房間資料）
                 del rooms[room_code]
                 return
 

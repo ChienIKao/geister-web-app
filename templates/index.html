@@ -215,6 +215,8 @@
         #main-menu-btn:hover {
             background: #1565c0;
         }
+        #side-area { min-width: 260px; max-width: 320px; margin-left: 24px; display: flex; flex-direction: column; align-items: flex-start; }
+        #side-content { width: 100%; }
     </style>
 </head>
 <body>
@@ -375,8 +377,18 @@
             const gameArea = document.getElementById('game-area');
             gameArea.classList.add('game-flex-row');
             gameArea.innerHTML = `
-                <div id='board-area'></div>
                 <div id='info-area'></div>
+                <div id='board-area'></div>
+                <div id='side-area'><div id='side-content'></div></div>
+            `;
+            // 顯示遊戲規則於 side-area
+            document.getElementById('side-content').innerHTML = `
+                <div style='font-size:1.08rem;line-height:1.7;color:#444;padding:8px 0;'>
+                  <b>獲勝條件：</b><br>
+                  1. 吃掉對方的 4 顆好鬼<br>
+                  2. 對方吃掉自己的 4 顆壞鬼<br>
+                  3. 讓任一顆自己的好鬼成功到達對方的兩個角落之一
+                </div>
             `;
             window.myTurn = (data.turn === data.your_player);
             window.myPlayerId = data.your_player;
@@ -402,13 +414,40 @@
         });
 
         socket.on('game_over', (data) => {
-            let msg = '遊戲結束！' + (data.reason ? ('\n' + data.reason) : '');
+            // 取得雙方暱稱
+            let myName = window.myName || '我';
+            let oppoName = window.oppoName || '對手';
+            // 解析 reason 內的「玩家1/2」為暱稱
+            let reason = data.reason || '';
+            reason = reason.replace(/玩家1/g, window.myPlayerId === 1 ? myName : oppoName)
+                           .replace(/玩家2/g, window.myPlayerId === 2 ? myName : oppoName);
+            let msg = '遊戲結束！';
+            if (reason) msg += '\n' + reason;
             let showWin = data.winner === window.myPlayerId;
-            let showLose = data.winner && data.winner !== window.myPlayerId && !(data.reason && data.reason.includes('對手斷線'));
+            let showLose = data.winner && data.winner !== window.myPlayerId && !(reason && reason.includes('對手斷線'));
             if (showWin) msg += '\n你獲勝了！';
             else if (showLose) msg += '\n你輸了...';
             else if (!data.winner) msg += '\n平手';
-            document.getElementById('game-area').innerHTML = `<div style='white-space:pre-line;font-size:1.2rem;margin-bottom:16px;'>${msg}</div><button id='main-menu-btn'>回到主選單</button>`;
+            // 將結算訊息顯示在 side-area
+            let sideContent = document.getElementById('side-content');
+            if (!sideContent) {
+                let sideArea = document.getElementById('side-area');
+                if (!sideArea) {
+                    // fallback: 動態建立
+                    let gameArea = document.getElementById('game-area');
+                    sideArea = document.createElement('div');
+                    sideArea.id = 'side-area';
+                    sideContent = document.createElement('div');
+                    sideContent.id = 'side-content';
+                    sideArea.appendChild(sideContent);
+                    gameArea.appendChild(sideArea);
+                } else {
+                    sideContent = document.createElement('div');
+                    sideContent.id = 'side-content';
+                    sideArea.appendChild(sideContent);
+                }
+            }
+            sideContent.innerHTML = `<div style='background:#fff3cd;border:1.5px solid #ffe066;color:#795548;font-size:1.2rem;font-weight:bold;padding:16px 12px 10px 12px;border-radius:10px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.08);white-space:pre-line;'>${msg}</div><button id='main-menu-btn' style='margin-top:10px;'>回到主選單</button>`;
             document.getElementById('main-menu-btn').onclick = function() {
                 location.reload();
             };
@@ -426,12 +465,21 @@
                 fromSq = [parseInt(moveMatch[1]), parseInt(moveMatch[2])];
                 toSq = [parseInt(moveMatch[3]), parseInt(moveMatch[4])];
             }
+            // 四個角落座標
+            const corners = [
+                [0,0], [0,5], [5,0], [5,5]
+            ];
             for (let r = 0; r < 6; r++) {
                 let rowDiv = document.createElement('div');
                 for (let c = 0; c < 6; c++) {
                     let span = document.createElement('span');
                     let cell = board[r][c];
                     span.className = 'cell';
+                    // 標記角落終點
+                    if (corners.some(([cr,cc]) => cr===r && cc===c)) {
+                        span.style.background = 'linear-gradient(135deg, #fffde7 60%, #ffe082 100%)';
+                        span.style.boxShadow = '0 0 0 2.5px #ffd600 inset';
+                    }
                     // 顏色區分與符號美化
                     if ((myPlayerId === 1 && cell === 'g') || (myPlayerId === 2 && cell === 'G')) {
                         span.classList.add('good');
